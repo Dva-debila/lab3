@@ -10,17 +10,34 @@ Breath = BreathI.data;
 Freq = FreqI.data;
 Temp = TempI.data;
 Time = TimeI.data;
-Water = WaterI.data;
-
+vFW = WaterI.data;
+[s1,s2] = size(Air);
+Traw = transpose(linspace(0, Time, s1));
 T = (1:size(Air(:,1)))/Freq;
 
 hold all;
 
-cAir1 = polyfit(T,Air(:,1),1);
-cAir2 = polyfit(T,Air(:,2),1);
-AirO(:,1) = Air(:,1) - polyval(cAir1,T)';
-AirO(:,2) = Air(:,2) - polyval(cAir2,T)';
-AirNorm = AirO ./ max(AirO);
+windowSize = 5;
+b = (1 / windowSize) * ones(1, windowSize);
+a = 1;
+
+airFiltered = filter(b, a, Air());
+breathFiltered = filter(b, a, Breath());
+
+start = 30;
+
+airFiltered = airFiltered(start:end, :);
+breathFiltered = breathFiltered(start:end, :);
+T = Traw(start:end);
+
+cAir = polyfit(T, airFiltered(:, 1), 3);
+cBreath = polyfit(T, breathFiltered(:, 1), 3);
+
+air = airFiltered - polyval(cAir, T);
+AirNorm = air ./ max(air);
+
+breath = breathFiltered - polyval(cBreath, T);
+BreathNorm = breath ./ max(breath);
 plot(T,AirNorm(:,1),'Color',[0,0,1],'LineWidth',0.5);
 plot(T,AirNorm(:,2),'Color',[1,0,0],'LineWidth',0.5);
 legend('Микрофон №1','Микрофон №2');
@@ -31,11 +48,7 @@ title(["Относительное измерение давления у мик
 saveas(gca,"air.png");
 hold off;
 
-cBreath1 = polyfit(T,Breath(:,1),1);
-cBreath2 = polyfit(T,Breath(:,2),1);
-BreathO(:,1) = Breath(:,1) - polyval(cBreath1,T)';
-BreathO(:,2) = Breath(:,2) - polyval(cBreath2,T)';
-BreathNorm = BreathO ./ max(BreathO);
+
 plot(T,BreathNorm(:,1),'Color',[0,0,1],'LineWidth',0.5);
 hold all;
 plot(T,BreathNorm(:,2),'Color',[1,0,0],'LineWidth',0.5);
@@ -46,3 +59,30 @@ ylabel("Отсчёта АЦП");
 title(["Относительное измерение давления у микрофонов","в воздухе из лёгких"]);
 saveas(gca,"breath.png");
 
+mA = find(AirNorm == max(AirNorm));
+mB = find(BreathNorm == max(BreathNorm));
+tA1 = T(mA(1));
+tA2 = T(mA(2)-995);
+tB1 = T(mB(1));
+tB2 = T(mB(2)-995);
+vA = 1.158/(tA2-tA1);
+vB = 1.158/(tB2-tB1);
+temp = Temp + 273.14;
+x_CO2 = linspace(0, 0.02);
+q = 1 - vFW - x_CO2;
+mu = 28.97.*q + 18.01*vFW + 44.01.*x_CO2;
+R = 8.314;
+g = (28.97*1.0036.*q + 18.01*1.863*vFW + 44.01*0.838.*x_CO2)./(28.97*0.7166.*q + 18.01*1.403*vFW + 44.01*0.649.*x_CO2);
+v = sqrt(1000 * R .* g * temp ./ mu);
+v11 = ones(100)*vB;
+
+hold off;
+plot(x_CO2,v,'b',x_CO2,v11,'r');
+line1 = GetLineFromTwoImagePoints(v(1),v(2));
+line2 = GetLineFromTwoImagePoints(v11(1),v11(2));
+is = 
+grid on;
+xlabel("Доля CO_2");
+ylabel("Скорость звука, м/с");
+title(["Зависимость скорости звука от объёмной доли CO_2"]);
+saveas(gca,"result.png");
